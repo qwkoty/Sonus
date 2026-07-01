@@ -172,32 +172,66 @@ export default function Visualizer({ isPlaying, coverRadius = 80, mode = 'ring' 
       }
     };
 
-    // ---- 模式：频谱瀑布图 ----
+    // ---- 模式：频谱瀑布图（居中镜像 + 渐变 + 辉光） ----
     const drawWaterfall = (spectrum, hasData) => {
       const data = spectrum;
       const colWidth = w / NUM_BARS;
+      const midY = cy;
 
       // 保存当前帧
       waterfallRef.current.push(Array.from(data));
-      if (waterfallRef.current.length > 80) waterfallRef.current.shift();
+      const MAX_HISTORY = 120;
+      if (waterfallRef.current.length > MAX_HISTORY) waterfallRef.current.shift();
 
       const history = waterfallRef.current;
-      const rowH = h / 80;
+      const rowH = (h * 0.42) / MAX_HISTORY; // 上下各占 42%
 
       for (let row = 0; row < history.length; row++) {
         const rowData = history[row];
-        const y = h - (row + 1) * rowH;
-        const ageAlpha = 1 - row / history.length;
+        // 越新的帧越靠近中心，越旧的越远（向外扩散）
+        const ageRatio = row / history.length;
+        const ageAlpha = Math.pow(1 - ageRatio, 0.6); // 缓慢衰减
 
         for (let i = 0; i < NUM_BARS; i++) {
           const value = rowData[i] || 0;
-          if (value < 0.02) continue;
+          if (value < 0.015) continue;
+
           const hue = 200 - (i / NUM_BARS) * 170;
           const x = i * colWidth;
-          ctx.fillStyle = `hsla(${hue}, 80%, 60%, ${value * ageAlpha * 0.85})`;
-          ctx.fillRect(x, y, colWidth + 1, rowH + 1);
+          const barH = value * h * 0.38;
+
+          // 上半部分（向上延伸）
+          const yTop = midY - row * rowH - barH;
+          // 下半部分（向下延伸，镜像）
+          const yBot = midY + row * rowH;
+
+          const alpha = value * ageAlpha;
+
+          // 渐变填充 - 上半
+          const gradTop = ctx.createLinearGradient(x, yTop, x, yTop + barH);
+          gradTop.addColorStop(0, `hsla(${hue}, 90%, 70%, 0)`);
+          gradTop.addColorStop(0.5, `hsla(${hue}, 85%, 60%, ${alpha * 0.7})`);
+          gradTop.addColorStop(1, `hsla(${hue}, 90%, 65%, ${alpha})`);
+          ctx.fillStyle = gradTop;
+          ctx.fillRect(x, yTop, colWidth + 1, barH);
+
+          // 渐变填充 - 下半（镜像）
+          const gradBot = ctx.createLinearGradient(x, yBot, x, yBot + barH);
+          gradBot.addColorStop(0, `hsla(${hue}, 90%, 65%, ${alpha})`);
+          gradBot.addColorStop(0.5, `hsla(${hue}, 85%, 60%, ${alpha * 0.7})`);
+          gradBot.addColorStop(1, `hsla(${hue}, 90%, 70%, 0)`);
+          ctx.fillStyle = gradBot;
+          ctx.fillRect(x, yBot, colWidth + 1, barH);
         }
       }
+
+      // 中心辉光线
+      const centerGrad = ctx.createLinearGradient(0, midY - 2, 0, midY + 2);
+      centerGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      centerGrad.addColorStop(0.5, 'rgba(255,255,255,0.15)');
+      centerGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = centerGrad;
+      ctx.fillRect(0, midY - 2, w, 4);
     };
 
     // ---- 主循环 ----
