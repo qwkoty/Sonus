@@ -110,13 +110,9 @@ export const usePlayerStore = create((set, get) => {
 
       let url = track.url || '';
 
-      if (!url && track.platform && track.rawId) {
-        try {
-          const res = await music.url(track.rawId, track.platform);
-          url = res?.data?.url || '';
-        } catch (err) {
-          console.error('获取播放链接失败', err);
-        }
+      // 对于有 rawId 的非 demo 歌曲，使用同源流代理解决 CORS
+      if (!url && track.platform && track.rawId && track.platform !== 'demo') {
+        url = music.stream(track.rawId, track.platform);
       }
 
       if (!url && track.platform === 'demo') {
@@ -150,21 +146,8 @@ export const usePlayerStore = create((set, get) => {
       }
     },
 
-    // 预加载搜索结果的URL
-    preloadUrls: async (tracks) => {
-      const toFetch = tracks.filter((t) => t.platform && t.rawId && !t.url).slice(0, 5);
-      await Promise.all(
-        toFetch.map(async (t) => {
-          try {
-            const res = await music.url(t.rawId, t.platform);
-            const url = res?.data?.url || '';
-            if (url) t.url = url;
-          } catch (e) {
-            // ignore
-          }
-        })
-      );
-    },
+    // 预加载：流代理模式下无需提前获取 URL
+    preloadUrls: async () => {},
 
     togglePlay: () => {
       initAudioSystem();

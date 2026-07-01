@@ -433,6 +433,55 @@ router.get('/url', async (req, res) => {
   }
 });
 
+// ---------- 音频流代理（解决 CORS） ----------
+router.get('/stream', async (req, res) => {
+  try {
+    const { id, platform } = req.query;
+    if (!id || !platform) return res.status(400).json({ error: 'id and platform required' });
+
+    let targetUrl = '';
+    if (platform === 'netease') {
+      targetUrl = await getNeteaseRealUrl(id);
+    } else if (platform === 'qq') {
+      targetUrl = await getQQUrl(id);
+    } else {
+      return res.status(400).json({ error: 'unsupported platform' });
+    }
+
+    if (!targetUrl) {
+      return res.status(404).json({ error: 'no audio url available' });
+    }
+
+    // 流式代理：转发 Range 请求以支持拖动进度条
+    const range = req.headers.range;
+    const upstreamHeaders = { ...COMMON_HEADERS };
+    if (range) upstreamHeaders.Range = range;
+
+    const upstream = await axios.get(targetUrl, {
+      responseType: 'stream',
+      headers: upstreamHeaders,
+      timeout: 15000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+    });
+
+    // 转发状态码和关键响应头
+    res.status(upstream.status);
+    const passHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
+    for (const h of passHeaders) {
+      if (upstream.headers[h]) res.setHeader(h, upstream.headers[h]);
+    }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    upstream.data.pipe(res);
+    req.on('close', () => upstream.data.destroy());
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
 // ---------- 获取歌词 ----------
 router.get('/lyric', async (req, res) => {
   try {
