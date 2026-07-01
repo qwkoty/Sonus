@@ -2,6 +2,14 @@ const express = require('express');
 const axios = require('axios');
 const router = express.Router();
 
+// 伪装国内 IP，部分平台对海外 IP 有限制
+const FAKE_IP = '223.5.5.5';
+const COMMON_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'X-Real-IP': FAKE_IP,
+  'X-Forwarded-For': FAKE_IP,
+};
+
 // ---------- 网易云音乐 ----------
 async function searchNetease(keyword, limit = 20) {
   const url = 'https://music.163.com/api/search/get/web';
@@ -15,8 +23,8 @@ async function searchNetease(keyword, limit = 20) {
       limit,
     },
     headers: {
+      ...COMMON_HEADERS,
       Referer: 'https://music.163.com/',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     },
     timeout: 15000,
   });
@@ -39,36 +47,38 @@ function getNeteaseUrl(id) {
   return `https://music.163.com/song/media/outer/url?id=${id}.mp3`;
 }
 
-// ---------- QQ 音乐（非官方接口） ----------
+// ---------- QQ 音乐（musicu.fcg 新接口） ----------
 async function searchQQ(keyword, page = 1, num = 20) {
-  const url = 'https://c.y.qq.com/soso/fcgi-bin/client_search_cp';
-  const { data } = await axios.get(url, {
-    params: {
-      ct: 24,
-      qqmusic_ver: 1298,
-      new_json: 1,
-      remoteplace: 'txt.yqq.song',
-      t: 0,
-      aggr: 1,
-      cr: 1,
-      catZhida: 1,
-      lossless: 0,
-      flag_qc: 0,
-      p: page,
-      n: num,
-      w: keyword,
+  const url = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
+  const payload = {
+    req_0: {
+      module: 'music.search.SearchCgiService',
+      method: 'DoSearchForQQMusicDesktop',
+      param: {
+        num_per_page: num,
+        page_num: page,
+        query: keyword,
+        search_type: 0,
+      },
     },
+    comm: {
+      g_tk: 5381,
+      uin: 0,
+      format: 'json',
+      platform: 'h5',
+    },
+  };
+
+  const { data } = await axios.get(url, {
+    params: { data: JSON.stringify(payload) },
     headers: {
+      ...COMMON_HEADERS,
       Referer: 'https://y.qq.com/',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
     timeout: 15000,
   });
 
-  // JSONP 解析: callback({...})
-  const match = String(data).match(/callback\((.*)\)$/s);
-  const json = match ? JSON.parse(match[1]) : {};
-  const list = json?.data?.song?.list || [];
+  const list = data?.req_0?.data?.body?.song?.list || [];
 
   return list.map((s) => ({
     id: `qq_${s.mid}`,
@@ -77,7 +87,9 @@ async function searchQQ(keyword, page = 1, num = 20) {
     title: s.name || s.title || '',
     artist: (s.singer || []).map((a) => a.name).join(' / '),
     album: s.album?.name || '',
-    cover: s.album?.mid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${s.album.mid}.jpg` : '',
+    cover: s.album?.mid
+      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${s.album.mid}.jpg`
+      : '',
     duration: s.interval || 0,
     url: null,
   }));
@@ -104,8 +116,8 @@ async function getQQUrl(songmid) {
   const { data } = await axios.get(url, {
     params: { data: JSON.stringify(payload) },
     headers: {
+      ...COMMON_HEADERS,
       Referer: 'https://y.qq.com/',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
     timeout: 10000,
   });
@@ -171,8 +183,8 @@ router.get('/url', async (req, res) => {
           maxRedirects: 5,
           timeout: 10000,
           headers: {
+            ...COMMON_HEADERS,
             Referer: 'https://music.163.com/',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           },
         });
         const finalUrl = headRes.request?.res?.responseUrl || headRes.headers?.location || redirectUrl;
