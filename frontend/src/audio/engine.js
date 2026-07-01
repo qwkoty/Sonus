@@ -126,6 +126,13 @@ export function readFrequencyData() {
   return dataArray;
 }
 
+export function readTimeDomainData() {
+  if (!analyser) return new Uint8Array(0);
+  const arr = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(arr);
+  return arr;
+}
+
 // 保留兼容
 export function readFrequencyDataLog(numBars = 64) {
   return getSpectrumBars(numBars);

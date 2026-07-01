@@ -1,14 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward,
   Heart, Shuffle, Repeat, ListMusic, Volume2,
-  Search, X, Plus, Music, Box
+  Search, X, Plus, Music
 } from 'lucide-react';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { music } from '../api/music';
 import Visualizer from '../components/Visualizer';
-import Visualizer3D from '../components/Visualizer3D';
 import FloatingLyrics from '../components/FloatingLyrics';
+
+// 3D 可视化按需加载，避免 Three.js 打入主包
+const Visualizer3D = lazy(() => import('../components/Visualizer3D'));
 
 function formatTime(s) {
   if (!s || isNaN(s)) return '0:00';
@@ -39,7 +41,13 @@ export default function Player() {
   const [searching, setSearching] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [addMenuTrack, setAddMenuTrack] = useState(null);
-  const [vizMode, setVizMode] = useState('2d'); // '2d' | '3d'
+  const [vizMode, setVizMode] = useState(() => {
+    try { return localStorage.getItem('sonus_viz_mode') || 'ring'; } catch { return 'ring'; }
+  });
+  const changeVizMode = (m) => {
+    setVizMode(m);
+    try { localStorage.setItem('sonus_viz_mode', m); } catch {}
+  };
   const progressRef = useRef(null);
 
   const isLiked = currentTrack ? liked.has(currentTrack.id) : false;
@@ -215,12 +223,12 @@ export default function Player() {
         }}>
           <FloatingLyrics lyrics={lyrics} isPlaying={isPlaying} />
           {vizMode === '3d'
-            ? <Visualizer3D isPlaying={isPlaying} coverRadius={COVER_RADIUS} />
-            : <Visualizer isPlaying={isPlaying} coverRadius={COVER_RADIUS} />
+            ? <Suspense fallback={null}><Visualizer3D coverRadius={COVER_RADIUS} /></Suspense>
+            : <Visualizer isPlaying={isPlaying} coverRadius={COVER_RADIUS} mode={vizMode} />
           }
 
-          {/* 圆形旋转封面 - 3D模式下隐藏（3D场景中没有封面） */}
-          {vizMode === '2d' && (
+          {/* 圆形旋转封面 - 3D模式下隐藏 */}
+          {vizMode !== '3d' && (
             <div style={{
               position: 'absolute',
               top: '50%', left: '50%',
@@ -245,24 +253,32 @@ export default function Player() {
           )}
         </div>
 
-        {/* 2D/3D 切换按钮 */}
-        <button
-          onClick={() => setVizMode(vizMode === '2d' ? '3d' : '2d')}
-          style={{
-            position: 'absolute',
-            top: 'calc(12px + env(safe-area-inset-top))',
-            right: 64,
-            zIndex: 200,
-            width: 40, height: 40, borderRadius: '50%',
-            background: vizMode === '3d' ? '#fff' : 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: vizMode === '3d' ? '#0A0A0A' : 'var(--text-secondary)',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-          }}
-        >
-          <Box size={16} />
-        </button>
+        {/* 可视化模式切换 */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {[
+            { key: 'ring', label: '环形' },
+            { key: 'wave', label: '波形' },
+            { key: 'particles', label: '粒子' },
+            { key: 'waterfall', label: '瀑布' },
+            { key: '3d', label: '3D' },
+          ].map((m) => (
+            <button
+              key={m.key}
+              onClick={() => changeVizMode(m.key)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 20,
+                fontSize: 11,
+                fontWeight: 600,
+                background: vizMode === m.key ? '#fff' : 'var(--surface)',
+                color: vizMode === m.key ? '#0A0A0A' : 'var(--text-muted)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
 
         {/* 当前歌词 */}
         <div style={{
