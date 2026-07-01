@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { readFrequencyDataLog } from '../audio/engine';
+import { getSpectrumBars } from '../audio/engine';
 
 export default function Visualizer({ isPlaying, coverRadius = 80 }) {
   const canvasRef = useRef(null);
@@ -35,7 +35,7 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
         return;
       }
 
-      const { data: freqData, hasData } = readFrequencyDataLog(BARS);
+      const { data: spectrum, hasData } = getSpectrumBars(BARS);
       const t = Date.now() * 0.001;
 
       for (let i = 0; i < BARS; i++) {
@@ -43,14 +43,19 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
 
         let value;
         if (hasData) {
-          value = freqData[i] || 0;
+          value = spectrum[i] || 0;
         } else {
           const wave1 = Math.sin(i * 0.25 + t * 2.0) * 0.5 + 0.5;
           const wave2 = Math.sin(i * 0.13 + t * 1.1) * 0.3 + 0.5;
-          value = wave1 * wave2 * 0.3;
+          value = wave1 * wave2 * 0.25;
         }
 
-        smooth[i] += (value - smooth[i]) * 0.22;
+        // Attack fast, release slow
+        if (value > smooth[i]) {
+          smooth[i] += (value - smooth[i]) * 0.5;
+        } else {
+          smooth[i] += (value - smooth[i]) * 0.1;
+        }
         const v = smooth[i];
 
         const barLen = Math.max(1.5 * dpr, v * MAX_BAR_LEN);
@@ -59,11 +64,11 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
         const x2 = cx + Math.cos(angle) * (INNER_R + barLen);
         const y2 = cy + Math.sin(angle) * (INNER_R + barLen);
 
-        // 渐变：根部暗蓝，尖端亮白
+        // 渐变：根部深蓝，中间亮蓝，尖端白
         const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-        grad.addColorStop(0, `rgba(80,140,220,${0.15 + v * 0.2})`);
-        grad.addColorStop(0.5, `rgba(160,200,255,${0.3 + v * 0.4})`);
-        grad.addColorStop(1, `rgba(255,255,255,${0.5 + v * 0.5})`);
+        grad.addColorStop(0, `rgba(50,100,200,${0.12 + v * 0.15})`);
+        grad.addColorStop(0.5, `rgba(120,180,255,${0.3 + v * 0.4})`);
+        grad.addColorStop(1, `rgba(255,255,255,${0.4 + v * 0.6})`);
 
         ctx.strokeStyle = grad;
         ctx.lineWidth = 2.5 * dpr;
@@ -74,19 +79,19 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
         ctx.stroke();
 
         // 尖端发光点
-        if (v > 0.25) {
-          ctx.fillStyle = `rgba(255,255,255,${v * 0.7})`;
+        if (v > 0.2) {
+          ctx.fillStyle = `rgba(200,230,255,${v * 0.8})`;
           ctx.beginPath();
-          ctx.arc(x2, y2, 1.5 * dpr * (1 + v), 0, Math.PI * 2);
+          ctx.arc(x2, y2, 1.8 * dpr * (0.8 + v * 0.5), 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
       // 内圈光环
       const avgEnergy = hasData
-        ? freqData.reduce((a, b) => a + b, 0) / BARS
+        ? spectrum.reduce((a, b) => a + b, 0) / BARS
         : (Math.sin(t * 1.5) * 0.5 + 0.5) * 0.1;
-      ctx.strokeStyle = `rgba(100,160,255,${0.05 + avgEnergy * 0.12})`;
+      ctx.strokeStyle = `rgba(80,140,255,${0.04 + avgEnergy * 0.15})`;
       ctx.lineWidth = 1.5 * dpr;
       ctx.beginPath();
       ctx.arc(cx, cy, INNER_R - 2 * dpr, 0, Math.PI * 2);

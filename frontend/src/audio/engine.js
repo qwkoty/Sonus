@@ -4,7 +4,7 @@ let audioCtx = null;
 let analyser = null;
 let source = null;
 let connected = false;
-let freqBuffer = null;
+let rawFreq = null;
 
 export function getAudio() {
   if (!audio) {
@@ -30,10 +30,10 @@ export function initAudioSystem() {
 
   if (!analyser) {
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 512; // 256 bins
-    analyser.smoothingTimeConstant = 0.82;
-    analyser.minDecibels = -85;
-    analyser.maxDecibels = -20;
+    analyser.fftSize = 1024; // 512 bins - 更高分辨率
+    analyser.smoothingTimeConstant = 0.75;
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -15;
   }
 
   if (!connected) {
@@ -54,39 +54,67 @@ export function getAnalyser() {
   return analyser;
 }
 
-export function getAudioContext() {
-  return audioCtx;
-}
-
-// 对数频谱映射 - 让所有频段都有数据
-export function readFrequencyDataLog(numBars = 64) {
-  if (!analyser) return { data: new Float32Array(numBars), hasData: false };
-  const bins = analyser.frequencyBinCount;
-  if (!freqBuffer || freqBuffer.length !== bins) {
-    freqBuffer = new Uint8Array(bins);
+// 核心：获取归一化的频谱数据
+// 使用对数频段分组 + 每组取峰值 + gamma 校正，确保所有柱子都有动态范围
+export function getSpectrumBars(numBars = 64) {
+  if (!analyser) {
+    // 返回待机假数据
+    const t = Date.now() * 0.001;
+    const data = new Float32Array(numBars);
+    for (let i = 0; i < numBars; i++) {
+      data[i] = (Math.sin(i * 0.2 + t * 1.8) * 0.5 + 0.5) * 0.15;
+    }
+    return { data, hasData: false };
   }
-  analyser.getByteFrequencyData(freqBuffer);
 
+  const bins = analyser.frequencyBinCount; // 512
+  if (!rawFreq || rawFreq.length !== bins) {
+    rawFreq = new Uint8Array(bins);
+  }
+  analyser.getByteFrequencyData(rawFreq);
+
+  // 跳过前 2 个 bin（通常是直流分量噪声）
+  const usableBins = bins - 2;
+  const startBin = 2;
+
+  // 对数频段分组
   const result = new Float32Array(numBars);
-  const minFreq = 1;
-  const maxFreq = bins;
-  const logMin = Math.log(minFreq);
-  const logMax = Math.log(maxFreq);
+  const logMin = 0;
+  const logMax = Math.log(usableBins);
 
   let totalEnergy = 0;
+
   for (let i = 0; i < numBars; i++) {
-    const ratio = i / numBars;
-    const logFreq = logMin + ratio * (logMax - logMin);
-    const binIdx = Math.floor(Math.exp(logFreq));
-    const binIdx2 = Math.min(binIdx + 1, bins - 1);
-    // 取两个 bin 的平均值
-    const val = (freqBuffer[binIdx] + freqBuffer[binIdx2]) / 2;
-    // 归一化并增强
-    result[i] = Math.pow(val / 255, 0.7);
-    totalEnergy += val;
+    const ratio0 = i / numBars;
+    const ratio1 = (i + 1) / numBars;
+
+    const binStart = Math.floor(Math.exp(logMin + ratio0 * (logMax - logMin)));
+    const binEnd = Math.max(binStart + 1, Math.floor(Math.exp(logMin + ratio1 * (logMax - logMin))));
+    const clampedEnd = Math.min(binEnd, usableBins);
+
+    // 取这个频段范围内的峰值
+    let peak = 0;
+    let sum = 0;
+    let count = 0;
+    for (let j = startBin + binStart; j < startBin + clampedEnd; j++) {
+      if (rawFreq[j] > peak) peak = rawFreq[j];
+      sum += rawFreq[j];
+      count++;
+    }
+
+    // 用峰值为主，平均为辅
+    const avg = count > 0 ? sum / count : 0;
+    const combined = peak * 0.7 + avg * 0.3;
+    const normalized = combined / 255;
+
+    // gamma 校正：提升低值，压低高值，让所有柱子都有更均匀的动态范围
+    const corrected = Math.pow(normalized, 0.6);
+
+    result[i] = corrected;
+    totalEnergy += normalized;
   }
 
-  const hasData = totalEnergy > numBars * 5;
+  const hasData = totalEnergy > numBars * 0.02;
   return { data: result, hasData };
 }
 
@@ -96,4 +124,9 @@ export function readFrequencyData() {
   const dataArray = new Uint8Array(bufferLength);
   analyser.getByteFrequencyData(dataArray);
   return dataArray;
+}
+
+// 保留兼容
+export function readFrequencyDataLog(numBars = 64) {
+  return getSpectrumBars(numBars);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { readFrequencyDataLog } from '../audio/engine';
+import { getSpectrumBars } from '../audio/engine';
 
 export default function Visualizer3D({ isPlaying }) {
   const mountRef = useRef(null);
@@ -24,23 +24,23 @@ export default function Visualizer3D({ isPlaying }) {
     mount.appendChild(renderer.domElement);
 
     // 灯光
-    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-    const light1 = new THREE.PointLight(0x88ccff, 1.5, 25);
-    light1.position.set(3, 6, 3);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const light1 = new THREE.PointLight(0x6699ff, 1.5, 30);
+    light1.position.set(4, 8, 4);
     scene.add(light1);
-    const light2 = new THREE.PointLight(0xff8866, 0.8, 25);
-    light2.position.set(-3, 4, -3);
+    const light2 = new THREE.PointLight(0xff6688, 0.6, 30);
+    light2.position.set(-4, 6, -4);
     scene.add(light2);
-    const topLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    topLight.position.set(0, 10, 0);
+    const topLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    topLight.position.set(0, 10, 2);
     scene.add(topLight);
 
-    // ---- 同心圆柱状条：内圈高，外圈低 ----
+    // ---- 4 圈同心圆柱 ----
     const RINGS = [
-      { count: 16, radius: 0.8, maxH: 3.0, freqStart: 0,  freqEnd: 8  },  // 内圈：低频，最高
-      { count: 24, radius: 1.6, maxH: 2.2, freqStart: 8,  freqEnd: 24 },
-      { count: 32, radius: 2.4, maxH: 1.6, freqStart: 24, freqEnd: 48 },
-      { count: 40, radius: 3.2, maxH: 1.1, freqStart: 48, freqEnd: 80 },  // 外圈：高频，最矮
+      { count: 20, radius: 0.9, maxH: 2.8, freqRange: [0,  12] },  // 内圈：低频
+      { count: 28, radius: 1.7, maxH: 2.0, freqRange: [12, 28] },
+      { count: 36, radius: 2.5, maxH: 1.5, freqRange: [28, 48] },
+      { count: 44, radius: 3.3, maxH: 1.0, freqRange: [48, 72] },  // 外圈：高频
     ];
 
     const allBars = [];
@@ -51,22 +51,24 @@ export default function Visualizer3D({ isPlaying }) {
       const ring = RINGS[r];
       for (let i = 0; i < ring.count; i++) {
         const angle = (i / ring.count) * Math.PI * 2;
-        const geo = new THREE.BoxGeometry(0.08, 1, 0.08);
-        geo.translate(0, 0.5, 0); // 枢轴在底部
+        const geo = new THREE.BoxGeometry(0.07, 1, 0.07);
+        geo.translate(0, 0.5, 0);
 
         // 颜色渐变：内圈暖白，外圈冷蓝
         const t = r / (RINGS.length - 1);
-        const hue = 0.55 + t * 0.05; // 蓝到青
-        const sat = 0.3 + t * 0.4;
-        const lit = 0.65 - t * 0.15;
+        const hue = 0.58 - t * 0.08; // 蓝(0.58) 到 青(0.50)
+        const sat = 0.4 + t * 0.3;
+        const lit = 0.6 - t * 0.1;
+        const color = new THREE.Color().setHSL(hue, sat, lit);
+
         const mat = new THREE.MeshStandardMaterial({
-          color: new THREE.Color().setHSL(hue, sat, lit),
-          roughness: 0.25,
-          metalness: 0.6,
+          color,
+          roughness: 0.2,
+          metalness: 0.7,
           transparent: true,
           opacity: 0.85,
-          emissive: new THREE.Color().setHSL(hue, sat, lit * 0.3),
-          emissiveIntensity: 0.5,
+          emissive: color,
+          emissiveIntensity: 0.3,
         });
 
         const bar = new THREE.Mesh(geo, mat);
@@ -77,69 +79,76 @@ export default function Visualizer3D({ isPlaying }) {
       }
     }
 
-    // ---- 地面光环 ----
-    for (let i = 0; i < 3; i++) {
-      const r = 0.8 + i * 0.8;
-      const ringGeo = new THREE.RingGeometry(r - 0.02, r + 0.02, 64);
+    // 地面光环
+    for (let i = 0; i < 4; i++) {
+      const r = 0.9 + i * 0.8;
+      const ringGeo = new THREE.RingGeometry(r - 0.015, r + 0.015, 64);
       const ringMat = new THREE.MeshBasicMaterial({
-        color: 0x4488ff,
+        color: 0x3366aa,
         transparent: true,
-        opacity: 0.04 - i * 0.01,
+        opacity: 0.05 - i * 0.008,
         side: THREE.DoubleSide,
       });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = -Math.PI / 2;
-      scene.add(ring);
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.rotation.x = -Math.PI / 2;
+      scene.add(ringMesh);
     }
 
-    // 动画
     const clock = new THREE.Clock();
+    const TOTAL_BARS = 72; // getSpectrumBars 返回的数量
 
     const animate = () => {
       const elapsed = clock.getElapsedTime();
-      const { data: freqData, hasData } = readFrequencyDataLog(80);
+      const { data: spectrum, hasData } = getSpectrumBars(TOTAL_BARS);
 
       let bassEnergy = 0;
       if (hasData) {
-        for (let i = 0; i < 8; i++) bassEnergy += freqData[i] || 0;
-        bassEnergy /= 8;
+        for (let i = 0; i < 6; i++) bassEnergy += spectrum[i] || 0;
+        bassEnergy /= 6;
       } else {
-        bassEnergy = (Math.sin(elapsed * 1.5) * 0.5 + 0.5) * 0.12;
+        bassEnergy = (Math.sin(elapsed * 1.5) * 0.5 + 0.5) * 0.1;
       }
 
       // 更新每根柱子
       for (const bar of allBars) {
         const ring = bar.ringData;
+        const [fStart, fEnd] = ring.freqRange;
+
         let value;
         if (hasData) {
-          // 从该环对应的频段范围取值
-          const freqIdx = Math.floor(ring.freqStart + (bar.idx / ring.count) * (ring.freqEnd - ring.freqStart));
-          value = (freqData[freqIdx] || 0);
+          // 从该环对应的频段范围取值，用该位置在环中的比例映射到频段
+          const freqIdx = Math.floor(fStart + (bar.idx / ring.count) * (fEnd - fStart));
+          value = spectrum[Math.min(freqIdx, TOTAL_BARS - 1)] || 0;
         } else {
           const wave = Math.sin(bar.idx * 0.3 + elapsed * (2 + bar.ring * 0.5)) * 0.5 + 0.5;
-          value = wave * 0.15 * (1 - bar.ring * 0.15);
+          value = wave * 0.12 * (1 - bar.ring * 0.12);
         }
 
-        bar.smooth += (value - bar.smooth) * 0.22;
-        const v = bar.smooth;
+        // 攻击快，释放慢 - 模拟真实 VU 表行为
+        const attack = 0.45;
+        const release = 0.08;
+        if (value > bar.smooth) {
+          bar.smooth += (value - bar.smooth) * attack;
+        } else {
+          bar.smooth += (value - bar.smooth) * release;
+        }
 
-        bar.mesh.scale.y = Math.max(0.08, v * ring.maxH);
-        bar.mesh.material.opacity = 0.4 + v * 0.6;
-        bar.mesh.material.emissiveIntensity = 0.2 + v * 1.2;
+        const v = Math.max(0.02, bar.smooth);
+        bar.mesh.scale.y = v * ring.maxH;
+        bar.mesh.material.opacity = 0.35 + v * 0.65;
+        bar.mesh.material.emissiveIntensity = 0.1 + v * 1.5;
       }
 
-      // 整体旋转
-      barGroup.rotation.y = elapsed * 0.15;
+      barGroup.rotation.y = elapsed * 0.12;
 
-      // 相机缓慢摆动
-      camera.position.x = Math.sin(elapsed * 0.12) * 1.2;
-      camera.position.z = 6.5 + Math.cos(elapsed * 0.1) * 0.8;
-      camera.position.y = 3.5 + Math.sin(elapsed * 0.18) * 0.4;
+      // 相机摆动
+      camera.position.x = Math.sin(elapsed * 0.1) * 1.5;
+      camera.position.z = 6.5 + Math.cos(elapsed * 0.08) * 1.0;
+      camera.position.y = 3.5 + Math.sin(elapsed * 0.15) * 0.5;
       camera.lookAt(0, 0.8, 0);
 
-      // 灯光脉动
-      light1.intensity = 0.8 + bassEnergy * 2.0;
-      light2.intensity = 0.4 + bassEnergy * 1.2;
+      light1.intensity = 0.7 + bassEnergy * 2.5;
+      light2.intensity = 0.3 + bassEnergy * 1.5;
 
       renderer.render(scene, camera);
       rafRef.current = requestAnimationFrame(animate);
