@@ -228,11 +228,6 @@ export const usePlayerStore = create((set, get) => {
       set({ qqAuth: null, connectedPlatform: 'none' });
     },
 
-    getSearchPlatforms: () => {
-      const { connectedPlatform } = get();
-      if (connectedPlatform === 'qq') return 'qq';
-      if (connectedPlatform === 'netease') return 'netease';
-      return 'netease,qq';
-    },
+
   };
 });

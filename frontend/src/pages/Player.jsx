@@ -24,9 +24,9 @@ export default function Player() {
   const store = usePlayerStore();
   const {
     currentTrack, isPlaying, currentTime, duration,
-    volume, playMode, playlist, liked, playlists, connectedPlatform,
+    volume, playMode, playlist, liked, playlists,
     togglePlay, next, prev, seek, setVolume,
-    toggleMode, toggleLike, playTrack, addToPlaylist, getSearchPlatforms,
+    toggleMode, toggleLike, playTrack, addToPlaylist,
   } = store;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -44,8 +44,7 @@ export default function Player() {
     if (!kw.trim()) return;
     setSearching(true);
     try {
-      const platforms = getSearchPlatforms();
-      const res = await music.search(kw, platforms, 15);
+      const res = await music.search(kw, 'netease,qq', 15);
       const list = (res.data || []).map((item) => ({
         ...item,
         cover: item.cover || `https://picsum.photos/seed/${item.id}/400/400`,
@@ -71,6 +70,8 @@ export default function Player() {
       display: 'flex',
       flexDirection: 'column',
       background: 'linear-gradient(180deg, #111 0%, #0A0A0A 100%)',
+      overflowY: 'auto',
+      overflowX: 'hidden',
     }}>
       {/* 右上角悬浮搜索按钮 */}
       <div style={{
@@ -141,11 +142,7 @@ export default function Player() {
             )}
           </div>
 
-          {connectedPlatform !== 'none' && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-              当前连接平台: {formatPlatform(connectedPlatform)}
-            </div>
-          )}
+
 
           {searching && (
             <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>
