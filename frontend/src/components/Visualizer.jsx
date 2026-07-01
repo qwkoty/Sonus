@@ -61,7 +61,7 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
         } else {
           const wave1 = Math.sin(i * 0.15 + t * 1.6) * 0.5 + 0.5;
           const wave2 = Math.sin(i * 0.08 + t * 0.85) * 0.3 + 0.5;
-          rawVal = wave1 * wave2 * 0.2;
+          rawVal = wave1 * wave2 * 0.35;
         }
         if (rawVal > smooth[i]) {
           smooth[i] += (rawVal - smooth[i]) * 0.5;
@@ -90,8 +90,8 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
 
       // ---- 绘制外层光晕 ----
       ctx.save();
-      ctx.shadowColor = 'rgba(100,170,255,0.4)';
-      ctx.shadowBlur = 20 * dpr;
+      ctx.shadowColor = 'rgba(80,160,255,0.55)';
+      ctx.shadowBlur = 28 * dpr;
       ctx.beginPath();
       // 用 Catmull-Rom 画平滑闭合曲线
       for (let i = 0; i < BARS; i++) {
@@ -116,10 +116,10 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
 
       // 径向渐变填充
       const grad = ctx.createRadialGradient(cx, cy, INNER_R, cx, cy, INNER_R + MAX_BAR_LEN);
-      grad.addColorStop(0, 'rgba(30,70,160,0.12)');
-      grad.addColorStop(0.4, 'rgba(60,130,230,0.2)');
-      grad.addColorStop(0.8, 'rgba(140,190,255,0.35)');
-      grad.addColorStop(1, 'rgba(255,255,255,0.5)');
+      grad.addColorStop(0, 'rgba(20,60,150,0.22)');
+      grad.addColorStop(0.35, 'rgba(50,120,235,0.42)');
+      grad.addColorStop(0.75, 'rgba(120,190,255,0.65)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.92)');
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
@@ -139,24 +139,24 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
         }
       }
       ctx.closePath();
-      ctx.strokeStyle = 'rgba(160,210,255,0.5)';
-      ctx.lineWidth = 1.2 * dpr;
+      ctx.strokeStyle = 'rgba(140,210,255,0.85)';
+      ctx.lineWidth = 1.5 * dpr;
       ctx.stroke();
 
       // ---- 高能量点发光 ----
       for (let i = 0; i < BARS; i++) {
         const v = values[i];
-        if (v > 0.35) {
+        if (v > 0.3) {
           const angle = (i / BARS) * Math.PI * 2 - Math.PI / 2;
           const r = INNER_R + v * MAX_BAR_LEN;
           const x = cx + Math.cos(angle) * r;
           const y = cy + Math.sin(angle) * r;
           ctx.save();
-          ctx.shadowColor = `rgba(200,230,255,${v * 0.6})`;
-          ctx.shadowBlur = 6 * dpr;
-          ctx.fillStyle = `rgba(255,255,255,${v * 0.7})`;
+          ctx.shadowColor = `rgba(200,235,255,${v * 0.7})`;
+          ctx.shadowBlur = 8 * dpr;
+          ctx.fillStyle = `rgba(255,255,255,${v * 0.85})`;
           ctx.beginPath();
-          ctx.arc(x, y, 1.2 * dpr, 0, Math.PI * 2);
+          ctx.arc(x, y, 1.4 * dpr, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
         }
@@ -165,9 +165,9 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
       // ---- 内圈呼吸光环 ----
       const avgEnergy = hasData
         ? spectrum.reduce((a, b) => a + b, 0) / 72
-        : (Math.sin(t * 1.5) * 0.5 + 0.5) * 0.08;
-      ctx.strokeStyle = `rgba(80,140,255,${0.04 + avgEnergy * 0.12})`;
-      ctx.lineWidth = 1 * dpr;
+        : (Math.sin(t * 1.5) * 0.5 + 0.5) * 0.12;
+      ctx.strokeStyle = `rgba(90,155,255,${0.08 + avgEnergy * 0.22})`;
+      ctx.lineWidth = 1.2 * dpr;
       ctx.beginPath();
       ctx.arc(cx, cy, INNER_R - 3 * dpr, 0, Math.PI * 2);
       ctx.stroke();
