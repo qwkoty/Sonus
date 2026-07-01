@@ -21,7 +21,7 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
     resize();
     window.addEventListener('resize', resize);
 
-    const BARS = 72;
+    const BARS = 96; // 更多点，更平滑
     const smooth = new Float32Array(BARS);
 
     const draw = () => {
@@ -38,51 +38,87 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
       const { data: spectrum, hasData } = getSpectrumBars(BARS);
       const t = Date.now() * 0.001;
 
+      // 计算每根柱子的值
+      const values = new Float32Array(BARS);
       for (let i = 0; i < BARS; i++) {
-        const angle = (i / BARS) * Math.PI * 2 - Math.PI / 2;
-
         let value;
         if (hasData) {
           value = spectrum[i] || 0;
         } else {
-          const wave1 = Math.sin(i * 0.25 + t * 2.0) * 0.5 + 0.5;
-          const wave2 = Math.sin(i * 0.13 + t * 1.1) * 0.3 + 0.5;
-          value = wave1 * wave2 * 0.25;
+          const wave1 = Math.sin(i * 0.18 + t * 1.8) * 0.5 + 0.5;
+          const wave2 = Math.sin(i * 0.09 + t * 0.9) * 0.3 + 0.5;
+          value = wave1 * wave2 * 0.2;
         }
-
         // Attack fast, release slow
         if (value > smooth[i]) {
           smooth[i] += (value - smooth[i]) * 0.5;
         } else {
           smooth[i] += (value - smooth[i]) * 0.1;
         }
-        const v = smooth[i];
+        values[i] = smooth[i];
+      }
 
-        const barLen = Math.max(1.5 * dpr, v * MAX_BAR_LEN);
-        const x1 = cx + Math.cos(angle) * INNER_R;
-        const y1 = cy + Math.sin(angle) * INNER_R;
-        const x2 = cx + Math.cos(angle) * (INNER_R + barLen);
-        const y2 = cy + Math.sin(angle) * (INNER_R + barLen);
+      // 绘制连续填充的外环
+      ctx.beginPath();
+      // 先画外轮廓（柱子顶端连线）
+      const outerPoints = [];
+      for (let i = 0; i <= BARS; i++) {
+        const idx = i % BARS;
+        const angle = (idx / BARS) * Math.PI * 2 - Math.PI / 2;
+        const v = values[idx];
+        const r = INNER_R + Math.max(1.5 * dpr, v * MAX_BAR_LEN);
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        outerPoints.push({ x, y });
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      // 闭合回内圈
+      for (let i = BARS; i >= 0; i--) {
+        const idx = i % BARS;
+        const angle = (idx / BARS) * Math.PI * 2 - Math.PI / 2;
+        const x = cx + Math.cos(angle) * INNER_R;
+        const y = cy + Math.sin(angle) * INNER_R;
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath();
 
-        // 渐变：根部深蓝，中间亮蓝，尖端白
-        const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-        grad.addColorStop(0, `rgba(50,100,200,${0.12 + v * 0.15})`);
-        grad.addColorStop(0.5, `rgba(120,180,255,${0.3 + v * 0.4})`);
-        grad.addColorStop(1, `rgba(255,255,255,${0.4 + v * 0.6})`);
+      // 径向渐变填充：内圈暗蓝 -> 外圈亮白
+      const grad = ctx.createRadialGradient(cx, cy, INNER_R, cx, cy, INNER_R + MAX_BAR_LEN);
+      grad.addColorStop(0, 'rgba(40,80,180,0.15)');
+      grad.addColorStop(0.5, 'rgba(80,150,255,0.25)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.5)');
+      ctx.fillStyle = grad;
+      ctx.fill();
 
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 2.5 * dpr;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
+      // 描边外轮廓
+      ctx.beginPath();
+      for (let i = 0; i <= BARS; i++) {
+        const idx = i % BARS;
+        const angle = (idx / BARS) * Math.PI * 2 - Math.PI / 2;
+        const v = values[idx];
+        const r = INNER_R + Math.max(1.5 * dpr, v * MAX_BAR_LEN);
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(180,220,255,0.4)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.stroke();
 
-        // 尖端发光点
-        if (v > 0.2) {
-          ctx.fillStyle = `rgba(200,230,255,${v * 0.8})`;
+      // 高能量点发光
+      for (let i = 0; i < BARS; i++) {
+        const v = values[i];
+        if (v > 0.3) {
+          const angle = (i / BARS) * Math.PI * 2 - Math.PI / 2;
+          const r = INNER_R + v * MAX_BAR_LEN;
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+          ctx.fillStyle = `rgba(255,255,255,${v * 0.6})`;
           ctx.beginPath();
-          ctx.arc(x2, y2, 1.8 * dpr * (0.8 + v * 0.5), 0, Math.PI * 2);
+          ctx.arc(x, y, 1.5 * dpr, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -90,8 +126,8 @@ export default function Visualizer({ isPlaying, coverRadius = 80 }) {
       // 内圈光环
       const avgEnergy = hasData
         ? spectrum.reduce((a, b) => a + b, 0) / BARS
-        : (Math.sin(t * 1.5) * 0.5 + 0.5) * 0.1;
-      ctx.strokeStyle = `rgba(80,140,255,${0.04 + avgEnergy * 0.15})`;
+        : (Math.sin(t * 1.5) * 0.5 + 0.5) * 0.08;
+      ctx.strokeStyle = `rgba(80,140,255,${0.05 + avgEnergy * 0.15})`;
       ctx.lineWidth = 1.5 * dpr;
       ctx.beginPath();
       ctx.arc(cx, cy, INNER_R - 2 * dpr, 0, Math.PI * 2);

@@ -16,7 +16,7 @@ export default function Visualizer3D({ isPlaying }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
     camera.position.set(0, 4, 7);
-    camera.lookAt(0, 0.5, 0);
+    camera.lookAt(0, 0.8, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(W, H);
@@ -35,12 +35,12 @@ export default function Visualizer3D({ isPlaying }) {
     topLight.position.set(0, 10, 2);
     scene.add(topLight);
 
-    // ---- 4 圈同心圆柱 ----
+    // ---- 4 圈同心圆柱，柱子宽度=间距，完全贴合 ----
     const RINGS = [
-      { count: 20, radius: 0.9, maxH: 2.8, freqRange: [0,  12] },  // 内圈：低频
-      { count: 28, radius: 1.7, maxH: 2.0, freqRange: [12, 28] },
-      { count: 36, radius: 2.5, maxH: 1.5, freqRange: [28, 48] },
-      { count: 44, radius: 3.3, maxH: 1.0, freqRange: [48, 72] },  // 外圈：高频
+      { count: 16, radius: 0.9, maxH: 2.8, freqRange: [0,  12] },
+      { count: 24, radius: 1.7, maxH: 2.0, freqRange: [12, 28] },
+      { count: 32, radius: 2.5, maxH: 1.5, freqRange: [28, 48] },
+      { count: 40, radius: 3.3, maxH: 1.0, freqRange: [48, 72] },
     ];
 
     const allBars = [];
@@ -49,14 +49,18 @@ export default function Visualizer3D({ isPlaying }) {
 
     for (let r = 0; r < RINGS.length; r++) {
       const ring = RINGS[r];
+      // 柱子宽度 = 弧长间距，让柱子完全贴合
+      const arcLen = (2 * Math.PI * ring.radius) / ring.count;
+      const barW = arcLen * 1.0; // 完全贴合，无间隙
+
       for (let i = 0; i < ring.count; i++) {
         const angle = (i / ring.count) * Math.PI * 2;
-        const geo = new THREE.BoxGeometry(0.07, 1, 0.07);
+        const geo = new THREE.BoxGeometry(barW, 1, barW);
         geo.translate(0, 0.5, 0);
 
         // 颜色渐变：内圈暖白，外圈冷蓝
         const t = r / (RINGS.length - 1);
-        const hue = 0.58 - t * 0.08; // 蓝(0.58) 到 青(0.50)
+        const hue = 0.58 - t * 0.08;
         const sat = 0.4 + t * 0.3;
         const lit = 0.6 - t * 0.1;
         const color = new THREE.Color().setHSL(hue, sat, lit);
@@ -95,7 +99,7 @@ export default function Visualizer3D({ isPlaying }) {
     }
 
     const clock = new THREE.Clock();
-    const TOTAL_BARS = 72; // getSpectrumBars 返回的数量
+    const TOTAL_BARS = 72;
 
     const animate = () => {
       const elapsed = clock.getElapsedTime();
@@ -109,14 +113,12 @@ export default function Visualizer3D({ isPlaying }) {
         bassEnergy = (Math.sin(elapsed * 1.5) * 0.5 + 0.5) * 0.1;
       }
 
-      // 更新每根柱子
       for (const bar of allBars) {
         const ring = bar.ringData;
         const [fStart, fEnd] = ring.freqRange;
 
         let value;
         if (hasData) {
-          // 从该环对应的频段范围取值，用该位置在环中的比例映射到频段
           const freqIdx = Math.floor(fStart + (bar.idx / ring.count) * (fEnd - fStart));
           value = spectrum[Math.min(freqIdx, TOTAL_BARS - 1)] || 0;
         } else {
@@ -124,13 +126,11 @@ export default function Visualizer3D({ isPlaying }) {
           value = wave * 0.12 * (1 - bar.ring * 0.12);
         }
 
-        // 攻击快，释放慢 - 模拟真实 VU 表行为
-        const attack = 0.45;
-        const release = 0.08;
+        // Attack fast, release slow
         if (value > bar.smooth) {
-          bar.smooth += (value - bar.smooth) * attack;
+          bar.smooth += (value - bar.smooth) * 0.45;
         } else {
-          bar.smooth += (value - bar.smooth) * release;
+          bar.smooth += (value - bar.smooth) * 0.08;
         }
 
         const v = Math.max(0.02, bar.smooth);
@@ -141,7 +141,6 @@ export default function Visualizer3D({ isPlaying }) {
 
       barGroup.rotation.y = elapsed * 0.12;
 
-      // 相机摆动
       camera.position.x = Math.sin(elapsed * 0.1) * 1.5;
       camera.position.z = 6.5 + Math.cos(elapsed * 0.08) * 1.0;
       camera.position.y = 3.5 + Math.sin(elapsed * 0.15) * 0.5;
