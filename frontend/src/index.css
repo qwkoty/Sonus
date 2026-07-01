@@ -46,13 +46,21 @@ body {
 
 ::-webkit-scrollbar {
   width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--surface);
+  background: rgba(255,255,255,0.15);
   border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+::selection {
+  background: rgba(255,255,255,0.15);
 }
 
 @keyframes fadeIn {
@@ -75,10 +83,14 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+@keyframes eqBar {
+  0% { transform: scaleY(0.3); }
+  100% { transform: scaleY(1); }
+}
 
-.animate-fadeIn { animation: fadeIn 0.4s ease both; }
-.animate-slideUp { animation: slideUp 0.4s ease both; }
-.animate-scaleIn { animation: scaleIn 0.3s ease both; }
+.animate-fadeIn { animation: fadeIn 0.3s ease both; }
+.animate-slideUp { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-scaleIn { animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 .glass {
   background: rgba(20, 20, 20, 0.8);

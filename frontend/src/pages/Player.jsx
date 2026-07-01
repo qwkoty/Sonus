@@ -1,8 +1,8 @@
-import { useState, useRef, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward,
   Heart, Shuffle, Repeat, ListMusic, Volume2,
-  Search, X, Plus, Music,
+  Search, X, Plus, Music, Loader2,
   User
 } from 'lucide-react';
 import { usePlayerStore } from '../store/usePlayerStore';
@@ -27,8 +27,6 @@ function formatPlatform(p) {
 const VIZ_MODES = [
   { key: 'ring', label: '环' },
   { key: 'wave', label: '波' },
-  { key: 'particles', label: '粒' },
-  { key: 'waterfall', label: '瀑' },
   { key: '3d', label: '3D' },
 ];
 
@@ -40,7 +38,7 @@ export default function Player({ onNavigate }) {
     togglePlay, next, prev, seek, setVolume,
     toggleMode, toggleLike, playTrack, addToPlaylist,
     platform, preloadUrls,
-    lyrics, currentLyric,
+    lyrics, currentLyric, isLoadingUrl,
   } = store;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -53,11 +51,21 @@ export default function Player({ onNavigate }) {
   const [vizMode, setVizMode] = useState(() => {
     try { return localStorage.getItem('sonus_viz_mode') || 'ring'; } catch { return 'ring'; }
   });
+  const [seeking, setSeeking] = useState(false);
+  const progressRef = useRef(null);
+  const searchInputRef = useRef(null);
+
   const changeVizMode = (m) => {
     setVizMode(m);
     try { localStorage.setItem('sonus_viz_mode', m); } catch {}
   };
-  const progressRef = useRef(null);
+
+  // 搜索面板打开时自动聚焦
+  useEffect(() => {
+    if (searchOpen && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  }, [searchOpen]);
 
   const isLiked = currentTrack ? liked.has(currentTrack.id) : false;
   const progress = duration ? (currentTime / duration) * 100 : 0;
@@ -89,6 +97,30 @@ export default function Player({ onNavigate }) {
     setQuery('');
   };
 
+  // 进度条交互：支持拖动
+  const handleProgressDown = (e) => {
+    setSeeking(true);
+    const update = (clientX) => {
+      const rect = progressRef.current.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      seek(ratio * duration);
+    };
+    update(e.clientX);
+
+    const onMove = (ev) => update(ev.touches ? ev.touches[0].clientX : ev.clientX);
+    const onUp = () => {
+      setSeeking(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove);
+    document.addEventListener('touchend', onUp);
+  };
+
   const floatBtn = {
     width: 38, height: 38, borderRadius: 12,
     background: 'rgba(30,30,36,0.7)',
@@ -99,6 +131,7 @@ export default function Player({ onNavigate }) {
     color: 'var(--text-primary)',
     boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
     transition: 'all 0.2s ease',
+    cursor: 'pointer',
   };
 
   return (
@@ -148,6 +181,23 @@ export default function Player({ onNavigate }) {
                   <Music size={40} />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* 加载指示器 */}
+          {isLoadingUrl && (
+            <div style={{
+              position: 'absolute',
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 10,
+              width: 'min(44vw, 180px)',
+              height: 'min(44vw, 180px)',
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Loader2 size={32} color="#fff" className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
             </div>
           )}
         </div>
@@ -209,7 +259,12 @@ export default function Player({ onNavigate }) {
         left: 16,
         zIndex: 100,
       }}>
-        <button onClick={() => onNavigate?.('profile')} style={floatBtn}>
+        <button
+          onClick={() => onNavigate?.('profile')}
+          style={floatBtn}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(50,50,56,0.8)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(30,30,36,0.7)'}
+        >
           <User size={18} />
         </button>
       </div>
@@ -224,6 +279,8 @@ export default function Player({ onNavigate }) {
         <button
           onClick={() => { setSearchOpen(!searchOpen); setResults([]); setQuery(''); setAddMenuTrack(null); }}
           style={floatBtn}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(50,50,56,0.8)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(30,30,36,0.7)'}
         >
           {searchOpen ? <X size={18} /> : <Search size={18} />}
         </button>
@@ -255,6 +312,7 @@ export default function Player({ onNavigate }) {
               fontSize: 12, fontWeight: 700,
               boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
               transition: 'all 0.2s ease',
+              cursor: 'pointer',
             }}
           >
             {m.label}
@@ -286,12 +344,14 @@ export default function Player({ onNavigate }) {
           </span>
           <div
             ref={progressRef}
-            style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 4, cursor: 'pointer' }}
-            onClick={(e) => {
-              const rect = progressRef.current.getBoundingClientRect();
-              const ratio = (e.clientX - rect.left) / rect.width;
-              seek(ratio * duration);
+            style={{
+              flex: 1, height: seeking ? 6 : 3,
+              background: 'rgba(255,255,255,0.12)', borderRadius: 4,
+              cursor: 'pointer',
+              transition: 'height 0.15s ease',
             }}
+            onMouseDown={handleProgressDown}
+            onTouchStart={handleProgressDown}
           >
             <div style={{
               width: `${progress}%`, height: '100%',
@@ -315,21 +375,29 @@ export default function Player({ onNavigate }) {
           padding: '6px 8px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
         }}>
-          <button onClick={() => setShowExtra(!showExtra)} style={{
-            width: 38, height: 38, borderRadius: '50%',
-            background: 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: showExtra ? '#fff' : 'var(--text-muted)',
-            transition: 'all 0.2s ease',
-          }}>
+          <button
+            onClick={() => setShowExtra(!showExtra)}
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: showExtra ? '#fff' : 'var(--text-muted)',
+              transition: 'all 0.2s ease',
+              cursor: 'pointer',
+            }}
+          >
             <ListMusic size={16} />
           </button>
-          <button onClick={prev} style={{
-            width: 38, height: 38, borderRadius: '50%',
-            background: 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-primary)',
-          }}>
+          <button
+            onClick={prev}
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+            }}
+          >
             <SkipBack size={20} fill="currentColor" />
           </button>
           <button
@@ -340,26 +408,40 @@ export default function Player({ onNavigate }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#0A0A0A',
               boxShadow: '0 4px 16px rgba(255,255,255,0.15)',
+              transition: 'transform 0.15s ease',
+              cursor: 'pointer',
             }}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             {isPlaying
               ? <Pause size={22} fill="currentColor" />
               : <Play size={22} fill="currentColor" style={{ marginLeft: 2 }} />}
           </button>
-          <button onClick={next} style={{
-            width: 38, height: 38, borderRadius: '50%',
-            background: 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-primary)',
-          }}>
+          <button
+            onClick={next}
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+            }}
+          >
             <SkipForward size={20} fill="currentColor" />
           </button>
-          <button onClick={toggleMode} style={{
-            width: 38, height: 38, borderRadius: '50%',
-            background: 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: playMode !== 'list' ? '#fff' : 'var(--text-muted)',
-          }}>
+          <button
+            onClick={toggleMode}
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: playMode !== 'list' ? '#fff' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+            title={playMode === 'random' ? '随机播放' : playMode === 'single' ? '单曲循环' : '列表循环'}
+          >
             {playMode === 'random' ? <Shuffle size={16} /> : playMode === 'single' ? <Repeat size={16} /> : <ListMusic size={16} />}
           </button>
         </div>
@@ -376,22 +458,31 @@ export default function Player({ onNavigate }) {
             padding: '8px 16px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           }}>
-            <button onClick={() => currentTrack && toggleLike(currentTrack.id)} style={{
-              color: isLiked ? '#fff' : 'var(--text-muted)',
-              display: 'flex', alignItems: 'center',
-            }}>
+            <button
+              onClick={() => currentTrack && toggleLike(currentTrack.id)}
+              style={{
+                color: isLiked ? '#fff' : 'var(--text-muted)',
+                display: 'flex', alignItems: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
               <Heart size={16} fill={isLiked ? 'currentColor' : 'none'} />
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 100 }}>
               <Volume2 size={13} color="var(--text-muted)" />
               <input type="range" min={0} max={1} step={0.01} value={volume}
                 onChange={(e) => setVolume(parseFloat(e.target.value))}
-                style={{ flex: 1, accentColor: '#fff', height: 2 }} />
+                style={{ flex: 1, accentColor: '#fff', height: 2, cursor: 'pointer' }} />
             </div>
-            <button onClick={() => setShowPlaylist(!showPlaylist)} style={{
-              color: showPlaylist ? '#fff' : 'var(--text-muted)',
-              fontSize: 11, fontWeight: 600,
-            }}>
+            <button
+              onClick={() => setShowPlaylist(!showPlaylist)}
+              style={{
+                color: showPlaylist ? '#fff' : 'var(--text-muted)',
+                fontSize: 11, fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
               列表
             </button>
           </div>
@@ -415,12 +506,20 @@ export default function Player({ onNavigate }) {
                 播放列表为空
               </div>
             ) : playlist.map((track, i) => (
-              <div key={track.id} onClick={() => playTrack(track)} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-                cursor: 'pointer',
-                borderBottom: i < playlist.length - 1 ? '1px solid var(--border)' : 'none',
-                color: currentTrack?.id === track.id ? '#fff' : 'var(--text-primary)',
-              }}>
+              <div
+                key={track.id}
+                onClick={() => playTrack(track)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
+                  cursor: 'pointer',
+                  borderBottom: i < playlist.length - 1 ? '1px solid var(--border)' : 'none',
+                  color: currentTrack?.id === track.id ? '#fff' : 'var(--text-primary)',
+                  opacity: currentTrack?.id === track.id ? 1 : 0.7,
+                  transition: 'opacity 0.2s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = currentTrack?.id === track.id ? '1' : '0.7'}
+              >
                 <img src={track.cover} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -428,6 +527,17 @@ export default function Player({ onNavigate }) {
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{track.artist}</div>
                 </div>
+                {currentTrack?.id === track.id && isPlaying && (
+                  <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 14 }}>
+                    {[3, 7, 5].map((h, idx) => (
+                      <div key={idx} style={{
+                        width: 2, height: h,
+                        background: '#fff', borderRadius: 1,
+                        animation: `eqBar 0.8s ease-in-out ${idx * 0.15}s infinite alternate`,
+                      }} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -451,22 +561,23 @@ export default function Player({ onNavigate }) {
           }}>
             <Search size={18} color="var(--text-muted)" />
             <input
+              ref={searchInputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && doSearch(query)}
               placeholder="搜索歌曲、艺术家..."
-              autoFocus
               style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 15, color: 'var(--text-primary)' }}
             />
             {query && (
-              <button onClick={() => { setQuery(''); setResults([]); }}>
+              <button onClick={() => { setQuery(''); setResults([]); }} style={{ cursor: 'pointer' }}>
                 <X size={18} color="var(--text-muted)" />
               </button>
             )}
           </div>
 
           {searching && (
-            <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
               正在搜寻...
             </div>
           )}
@@ -493,10 +604,11 @@ export default function Player({ onNavigate }) {
                     background: addMenuTrack === track.id ? '#fff' : 'var(--surface)',
                     color: addMenuTrack === track.id ? '#0A0A0A' : 'var(--text-secondary)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    cursor: 'pointer',
                   }}>
                   <Plus size={14} />
                 </button>
-                <button onClick={() => handlePlaySearch(track)} style={{ color: '#fff', flexShrink: 0 }}>
+                <button onClick={() => handlePlaySearch(track)} style={{ color: '#fff', flexShrink: 0, cursor: 'pointer' }}>
                   <Play size={18} />
                 </button>
 
@@ -512,7 +624,7 @@ export default function Player({ onNavigate }) {
                     </div>
                     {playlists.map((pl) => (
                       <button key={pl.id} onClick={() => { addToPlaylist(pl.id, track); setAddMenuTrack(null); }}
-                        style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: 13, textAlign: 'left', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>
+                        style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: 13, textAlign: 'left', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
                         {pl.name}
                       </button>
                     ))}

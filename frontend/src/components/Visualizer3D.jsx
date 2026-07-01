@@ -4,7 +4,7 @@ import { getSpectrumBars } from '../audio/engine';
 
 const PARTICLE_COUNT = 4000;
 const NUM_BARS = 64;
-const BASE_RADIUS = 70;
+const BASE_RADIUS = 55;
 
 // 3D 粒子星球：球面粒子随频谱呼吸位移，加色混合辉光，自动旋转
 export default function Visualizer3D({ coverRadius = 80 }) {
@@ -19,8 +19,8 @@ export default function Visualizer3D({ coverRadius = 80 }) {
     const H = container.offsetHeight;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 1000);
-    camera.position.z = 190;
+    const camera = new THREE.PerspectiveCamera(75, W / H, 0.1, 1000);
+    camera.position.z = 160;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(W, H);
@@ -102,14 +102,14 @@ export default function Visualizer3D({ coverRadius = 80 }) {
       } else {
         bass = 0.08 + Math.sin(Date.now() * 0.001) * 0.04;
       }
-      const breathe = 1 + bass * 0.35;
+      const breathe = 1 + bass * 0.25;
 
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         const bi = barIdxMap[i];
         const value = hasData
           ? data[bi]
           : 0.08 + Math.sin(Date.now() * 0.002 + i * 0.012) * 0.05;
-        const disp = 1 + value * 0.85;
+        const disp = 1 + value * 0.6;
 
         const ox = original[i * 3];
         const oy = original[i * 3 + 1];
