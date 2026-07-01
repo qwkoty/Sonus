@@ -37,7 +37,11 @@ async function searchNetease(keyword, limit = 20) {
     title: s.name,
     artist: (s.artists || []).map((a) => a.name).join(' / '),
     album: s.album?.name || '',
-    cover: s.album?.picUrl ? s.album.picUrl + '?param=300x300' : '',
+    cover: s.album?.picUrl
+      ? s.album.picUrl + '?param=300x300'
+      : s.album?.blurPicUrl
+        ? s.album.blurPicUrl + '?param=300x300'
+        : '',
     duration: Math.floor((s.duration || 0) / 1000),
     url: null,
   }));
