@@ -241,33 +241,24 @@ export default function Player() {
         </div>
       )}
 
-      {/* 可视化区域 - 占满上半部分 */}
+      {/* 封面区域 */}
       <div style={{
         flex: 1,
-        position: 'relative',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: 280,
+        minHeight: 240,
+        paddingTop: 'calc(56px + env(safe-area-inset-top))',
+        gap: 20,
       }}>
         <div style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 1,
-        }}>
-          <Visualizer isPlaying={isPlaying} />
-        </div>
-
-        {/* 封面叠加在可视化中心 */}
-        <div style={{
-          position: 'relative',
-          zIndex: 2,
-          width: 'min(42vw, 180px)',
+          width: 'min(58vw, 260px)',
           aspectRatio: '1',
-          borderRadius: '50%',
+          borderRadius: 24,
           overflow: 'hidden',
-          border: '2px solid rgba(255,255,255,0.1)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(255,255,255,0.04)',
+          border: '1px solid var(--border)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 8px 24px rgba(255,255,255,0.03)',
         }}>
           {currentTrack ? (
             <img
@@ -277,7 +268,6 @@ export default function Player() {
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                animation: isPlaying ? 'spin 20s linear infinite' : 'none',
               }}
             />
           ) : (
@@ -290,9 +280,14 @@ export default function Player() {
               justifyContent: 'center',
               color: 'var(--text-muted)',
             }}>
-              <Music size={36} />
+              <Music size={48} />
             </div>
           )}
+        </div>
+
+        {/* 可视化频谱 - 放在封面下方 */}
+        <div style={{ width: 'min(72vw, 320px)', height: 40 }}>
+          <Visualizer isPlaying={isPlaying} />
         </div>
       </div>
 
