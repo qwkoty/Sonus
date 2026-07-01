@@ -4,10 +4,11 @@ import { getSpectrumBars } from '../audio/engine';
 
 const PARTICLE_COUNT = 4000;
 const NUM_BARS = 64;
-const BASE_RADIUS = 42;
+const FOV = 75;
 
 // 3D 粒子星球：球面粒子随频谱呼吸位移，加色混合辉光，自动旋转
-export default function Visualizer3D({ coverRadius = 80 }) {
+// 完全自适应容器尺寸：根据可视半径动态计算 BASE_RADIUS，保证粒子永不超出边界
+export default function Visualizer3D() {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -15,12 +16,11 @@ export default function Visualizer3D({ coverRadius = 80 }) {
     if (!container) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W = container.offsetWidth;
-    const H = container.offsetHeight;
+    let W = container.offsetWidth;
+    let H = container.offsetHeight;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(80, W / H, 0.1, 1000);
-    camera.position.z = 130;
+    const camera = new THREE.PerspectiveCamera(FOV, W / H, 0.1, 2000);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(W, H);
@@ -29,35 +29,69 @@ export default function Visualizer3D({ coverRadius = 80 }) {
     renderer.domElement.style.height = '100%';
     container.appendChild(renderer.domElement);
 
-    // Fibonacci 球面分布
+    // ---- 自适应核心：计算可视半径，反推安全粒子半径 ----
+    // 最大位移乘数 = (1 + maxDisplacement) * (1 + maxBreathe)
+    const MAX_DISPLACEMENT = 0.45;
+    const MAX_BREATHE = 0.2;
+    const SAFETY = 0.82; // 留 18% 安全余量
+
+    let baseRadius, cameraZ;
+
+    const computeLayout = () => {
+      W = container.offsetWidth;
+      H = container.offsetHeight;
+      const aspect = W / H;
+
+      // 相机距离设为容器短边的 1.8 倍，保证视角舒适
+      const minDim = Math.min(W, H);
+      cameraZ = minDim * 1.8;
+
+      // 可视半径（在 cameraZ 距离处，短边方向）
+      const halfFovRad = (FOV / 2) * Math.PI / 180;
+      const visibleRadius = cameraZ * Math.tan(halfFovRad);
+
+      // 粒子最大延伸 = baseRadius * (1+disp) * (1+breathe) 必须 <= visibleRadius * SAFETY
+      const maxMultiplier = (1 + MAX_DISPLACEMENT) * (1 + MAX_BREATHE);
+      baseRadius = (visibleRadius * SAFETY) / maxMultiplier;
+
+      camera.aspect = aspect;
+      camera.position.z = cameraZ;
+      camera.updateProjectionMatrix();
+    };
+
+    computeLayout();
+
+    // ---- Fibonacci 球面分布 ----
     const positions = new Float32Array(PARTICLE_COUNT * 3);
     const original = new Float32Array(PARTICLE_COUNT * 3);
     const colors = new Float32Array(PARTICLE_COUNT * 3);
     const barIdxMap = new Int32Array(PARTICLE_COUNT);
 
-    const golden = Math.PI * (3 - Math.sqrt(5));
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const y = 1 - (i / (PARTICLE_COUNT - 1)) * 2;
-      const r = Math.sqrt(1 - y * y);
-      const theta = golden * i;
-      const x = Math.cos(theta) * r;
-      const z = Math.sin(theta) * r;
+    const buildSphere = () => {
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const y = 1 - (i / (PARTICLE_COUNT - 1)) * 2;
+        const r = Math.sqrt(1 - y * y);
+        const theta = golden * i;
+        const x = Math.cos(theta) * r;
+        const z = Math.sin(theta) * r;
 
-      original[i * 3] = x * BASE_RADIUS;
-      original[i * 3 + 1] = y * BASE_RADIUS;
-      original[i * 3 + 2] = z * BASE_RADIUS;
-      positions[i * 3] = x * BASE_RADIUS;
-      positions[i * 3 + 1] = y * BASE_RADIUS;
-      positions[i * 3 + 2] = z * BASE_RADIUS;
+        original[i * 3] = x * baseRadius;
+        original[i * 3 + 1] = y * baseRadius;
+        original[i * 3 + 2] = z * baseRadius;
+        positions[i * 3] = original[i * 3];
+        positions[i * 3 + 1] = original[i * 3 + 1];
+        positions[i * 3 + 2] = original[i * 3 + 2];
 
-      // 颜色：从青蓝到暖白，按纬度渐变
-      const t = (y + 1) / 2;
-      colors[i * 3] = 0.25 + t * 0.75;
-      colors[i * 3 + 1] = 0.75 + t * 0.25;
-      colors[i * 3 + 2] = 1.0;
+        const t = (y + 1) / 2;
+        colors[i * 3] = 0.25 + t * 0.75;
+        colors[i * 3 + 1] = 0.75 + t * 0.25;
+        colors[i * 3 + 2] = 1.0;
 
-      barIdxMap[i] = Math.floor(Math.random() * NUM_BARS);
-    }
+        barIdxMap[i] = Math.floor(Math.random() * NUM_BARS);
+      }
+    };
+    buildSphere();
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -76,8 +110,8 @@ export default function Visualizer3D({ coverRadius = 80 }) {
     const points = new THREE.Points(geometry, material);
     scene.add(points);
 
-    // 内层光晕球（半透明，营造体积感）
-    const haloGeo = new THREE.SphereGeometry(BASE_RADIUS * 0.55, 32, 32);
+    // 内层光晕球
+    const haloGeo = new THREE.SphereGeometry(1, 32, 32);
     const haloMat = new THREE.MeshBasicMaterial({
       color: 0x1a2a4a,
       transparent: true,
@@ -85,6 +119,7 @@ export default function Visualizer3D({ coverRadius = 80 }) {
       blending: THREE.AdditiveBlending,
     });
     const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.scale.setScalar(baseRadius * 0.55);
     scene.add(halo);
 
     let raf;
@@ -94,7 +129,6 @@ export default function Visualizer3D({ coverRadius = 80 }) {
     const animate = () => {
       const { data, hasData } = getSpectrumBars(NUM_BARS);
 
-      // 低频能量驱动呼吸
       let bass = 0;
       if (hasData) {
         for (let i = 0; i < 8; i++) bass += data[i];
@@ -102,26 +136,23 @@ export default function Visualizer3D({ coverRadius = 80 }) {
       } else {
         bass = 0.08 + Math.sin(Date.now() * 0.001) * 0.04;
       }
-      const breathe = 1 + bass * 0.18;
+      // 限制呼吸在安全范围内
+      const breathe = 1 + Math.min(bass, 1) * MAX_BREATHE;
 
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         const bi = barIdxMap[i];
         const value = hasData
           ? data[bi]
           : 0.08 + Math.sin(Date.now() * 0.002 + i * 0.012) * 0.05;
-        const disp = 1 + value * 0.4;
+        // 限制位移在安全范围内
+        const disp = 1 + Math.min(value, 1) * MAX_DISPLACEMENT;
 
-        const ox = original[i * 3];
-        const oy = original[i * 3 + 1];
-        const oz = original[i * 3 + 2];
+        posAttr.array[i * 3] = original[i * 3] * disp * breathe;
+        posAttr.array[i * 3 + 1] = original[i * 3 + 1] * disp * breathe;
+        posAttr.array[i * 3 + 2] = original[i * 3 + 2] * disp * breathe;
 
-        posAttr.array[i * 3] = ox * disp * breathe;
-        posAttr.array[i * 3 + 1] = oy * disp * breathe;
-        posAttr.array[i * 3 + 2] = oz * disp * breathe;
-
-        // 颜色亮度随位移变化
         const intensity = 0.35 + value * 0.65;
-        const t = (oy / BASE_RADIUS + 1) / 2;
+        const t = (original[i * 3 + 1] / baseRadius + 1) / 2;
         colorAttr.array[i * 3] = (0.25 + t * 0.75) * intensity;
         colorAttr.array[i * 3 + 1] = (0.75 + t * 0.25) * intensity;
         colorAttr.array[i * 3 + 2] = 1.0 * intensity;
@@ -130,11 +161,10 @@ export default function Visualizer3D({ coverRadius = 80 }) {
       posAttr.needsUpdate = true;
       colorAttr.needsUpdate = true;
 
-      // 自动旋转
       points.rotation.y += 0.003;
       points.rotation.x += 0.0008;
       halo.rotation.y -= 0.001;
-      halo.scale.setScalar(breathe);
+      halo.scale.setScalar(baseRadius * 0.55 * breathe);
 
       renderer.render(scene, camera);
       raf = requestAnimationFrame(animate);
@@ -143,11 +173,12 @@ export default function Visualizer3D({ coverRadius = 80 }) {
     animate();
 
     const handleResize = () => {
-      const nw = container.offsetWidth;
-      const nh = container.offsetHeight;
-      camera.aspect = nw / nh;
-      camera.updateProjectionMatrix();
-      renderer.setSize(nw, nh);
+      computeLayout();
+      // 重建粒子位置以适配新半径
+      buildSphere();
+      posAttr.needsUpdate = true;
+      halo.scale.setScalar(baseRadius * 0.55);
+      renderer.setSize(W, H);
     };
     window.addEventListener('resize', handleResize);
 
@@ -163,7 +194,7 @@ export default function Visualizer3D({ coverRadius = 80 }) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
     };
-  }, [coverRadius]);
+  }, []);
 
   return (
     <div
