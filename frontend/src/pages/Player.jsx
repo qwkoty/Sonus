@@ -126,7 +126,6 @@ export default function Player({ onNavigate }) {
 
   const isLiked = currentTrack ? liked.has(currentTrack.id) : false;
   const progress = duration ? (currentTime / duration) * 100 : 0;
-  const COVER_RADIUS = 90;
 
   const doSearch = async (kw) => {
     if (!kw.trim()) return;
@@ -213,8 +212,8 @@ export default function Player({ onNavigate }) {
         }}>
           <FloatingLyrics lyrics={lyrics} isPlaying={isPlaying} />
           {vizMode === '3d'
-            ? <Suspense fallback={null}><Visualizer3D coverRadius={COVER_RADIUS} /></Suspense>
-            : <Visualizer isPlaying={isPlaying} coverRadius={COVER_RADIUS} mode={vizMode} />
+            ? <Suspense fallback={null}><Visualizer3D /></Suspense>
+            : <Visualizer isPlaying={isPlaying} mode={vizMode} />
           }
 
           {vizMode !== '3d' && (
