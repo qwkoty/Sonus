@@ -4,6 +4,7 @@ let audioCtx = null;
 let analyser = null;
 let source = null;
 let connected = false;
+let freqBuffer = null;
 
 export function getAudio() {
   if (!audio) {
@@ -17,7 +18,6 @@ export function getAudio() {
 export function initAudioSystem() {
   const a = getAudio();
 
-  // 创建 AudioContext（必须在用户交互后）
   if (!audioCtx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return { audio: a, audioCtx: null, analyser: null };
@@ -30,13 +30,12 @@ export function initAudioSystem() {
 
   if (!analyser) {
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 128; // 64 bins usable
-    analyser.smoothingTimeConstant = 0.85;
-    analyser.minDecibels = -90;
-    analyser.maxDecibels = -10;
+    analyser.fftSize = 512; // 256 bins
+    analyser.smoothingTimeConstant = 0.82;
+    analyser.minDecibels = -85;
+    analyser.maxDecibels = -20;
   }
 
-  // 一个 audio 元素只能连接一次 MediaElementSource
   if (!connected) {
     try {
       source = audioCtx.createMediaElementSource(a);
@@ -44,7 +43,7 @@ export function initAudioSystem() {
       analyser.connect(audioCtx.destination);
       connected = true;
     } catch (e) {
-      // 可能已经连接过（如热重载），忽略
+      // ignore
     }
   }
 
@@ -57,6 +56,38 @@ export function getAnalyser() {
 
 export function getAudioContext() {
   return audioCtx;
+}
+
+// 对数频谱映射 - 让所有频段都有数据
+export function readFrequencyDataLog(numBars = 64) {
+  if (!analyser) return { data: new Float32Array(numBars), hasData: false };
+  const bins = analyser.frequencyBinCount;
+  if (!freqBuffer || freqBuffer.length !== bins) {
+    freqBuffer = new Uint8Array(bins);
+  }
+  analyser.getByteFrequencyData(freqBuffer);
+
+  const result = new Float32Array(numBars);
+  const minFreq = 1;
+  const maxFreq = bins;
+  const logMin = Math.log(minFreq);
+  const logMax = Math.log(maxFreq);
+
+  let totalEnergy = 0;
+  for (let i = 0; i < numBars; i++) {
+    const ratio = i / numBars;
+    const logFreq = logMin + ratio * (logMax - logMin);
+    const binIdx = Math.floor(Math.exp(logFreq));
+    const binIdx2 = Math.min(binIdx + 1, bins - 1);
+    // 取两个 bin 的平均值
+    const val = (freqBuffer[binIdx] + freqBuffer[binIdx2]) / 2;
+    // 归一化并增强
+    result[i] = Math.pow(val / 255, 0.7);
+    totalEnergy += val;
+  }
+
+  const hasData = totalEnergy > numBars * 5;
+  return { data: result, hasData };
 }
 
 export function readFrequencyData() {
