@@ -16,6 +16,16 @@ function createAudio() {
   return audio;
 }
 
+function loadPlaylists() {
+  try {
+    return JSON.parse(localStorage.getItem('sonus_playlists') || '[]');
+  } catch { return []; }
+}
+
+function savePlaylists(list) {
+  localStorage.setItem('sonus_playlists', JSON.stringify(list));
+}
+
 export const usePlayerStore = create((set, get) => {
   const audio = createAudio();
 
@@ -54,6 +64,7 @@ export const usePlayerStore = create((set, get) => {
     fullscreen: false,
     liked: new Set(),
     isLoadingUrl: false,
+    playlists: loadPlaylists(),
 
     audio,
 
@@ -65,7 +76,6 @@ export const usePlayerStore = create((set, get) => {
 
       let url = track.url || '';
 
-      // 聚合音源需要动态获取播放链接
       if (!url && track.platform && track.rawId) {
         try {
           const res = await music.url(track.rawId, track.platform);
@@ -75,9 +85,7 @@ export const usePlayerStore = create((set, get) => {
         }
       }
 
-      // demo 歌曲给一个示例音频（无版权问题）
       if (!url && track.platform === 'demo') {
-        // 使用一个公开的 demo 音频
         url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
       }
 
@@ -104,13 +112,12 @@ export const usePlayerStore = create((set, get) => {
         audio.pause();
         set({ isPlaying: false });
       } else {
-        if (audio.src && audio.src !== window.location.href) {
+        if (audio.src && !audio.src.includes(window.location.host)) {
           audio.play().then(() => set({ isPlaying: true })).catch((err) => {
             console.error('播放失败', err);
             set({ isPlaying: false });
           });
         } else {
-          // 没有 src，尝试重新加载当前歌曲
           get().playTrack(currentTrack);
         }
       }
@@ -181,6 +188,54 @@ export const usePlayerStore = create((set, get) => {
       return { liked: next };
     }),
 
-    tick: () => {}, // audio 事件已经自动同步时间了
+    // 歌单系统
+    createPlaylist: (name) => {
+      const newPlaylist = { id: Date.now().toString(), name, tracks: [], createdAt: Date.now() };
+      set((s) => {
+        const next = [...s.playlists, newPlaylist];
+        savePlaylists(next);
+        return { playlists: next };
+      });
+    },
+
+    deletePlaylist: (id) => set((s) => {
+      const next = s.playlists.filter((p) => p.id !== id);
+      savePlaylists(next);
+      return { playlists: next };
+    }),
+
+    addToPlaylist: (playlistId, track) => {
+      set((s) => {
+        const next = s.playlists.map((p) => {
+          if (p.id !== playlistId) return p;
+          if (p.tracks.some((t) => t.id === track.id)) return p;
+          return { ...p, tracks: [...p.tracks, track] };
+        });
+        savePlaylists(next);
+        return { playlists: next };
+      });
+    },
+
+    removeFromPlaylist: (playlistId, trackId) => {
+      set((s) => {
+        const next = s.playlists.map((p) => {
+          if (p.id !== playlistId) return p;
+          return { ...p, tracks: p.tracks.filter((t) => t.id !== trackId) };
+        });
+        savePlaylists(next);
+        return { playlists: next };
+      });
+    },
+
+    playPlaylist: (playlistId) => {
+      const { playlists } = get();
+      const pl = playlists.find((p) => p.id === playlistId);
+      if (pl && pl.tracks.length) {
+        set({ playlist: pl.tracks });
+        get().playTrack(pl.tracks[0]);
+      }
+    },
+
+    tick: () => {},
   };
 });

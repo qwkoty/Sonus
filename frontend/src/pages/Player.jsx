@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward,
   Heart, Shuffle, Repeat, ListMusic, Volume2,
-  Search, X
+  Search, X, Plus
 } from 'lucide-react';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { music } from '../api/music';
@@ -24,9 +24,9 @@ export default function Player() {
   const store = usePlayerStore();
   const {
     currentTrack, isPlaying, currentTime, duration,
-    volume, playMode, playlist, liked,
+    volume, playMode, playlist, liked, playlists,
     togglePlay, next, prev, seek, setVolume,
-    toggleMode, toggleLike, playTrack,
+    toggleMode, toggleLike, playTrack, addToPlaylist,
   } = store;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -34,6 +34,7 @@ export default function Player() {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [addMenuTrack, setAddMenuTrack] = useState(null);
   const progressRef = useRef(null);
 
   const isLiked = currentTrack ? liked.has(currentTrack.id) : false;
@@ -68,7 +69,7 @@ export default function Player() {
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      background: 'linear-gradient(180deg, #141418 0%, #0C0C0F 100%)',
+      background: 'linear-gradient(180deg, #111 0%, #0A0A0A 100%)',
     }}>
       {/* 右上角悬浮搜索按钮 */}
       <div style={{
@@ -78,17 +79,17 @@ export default function Player() {
         zIndex: 200,
       }}>
         <button
-          onClick={() => { setSearchOpen(!searchOpen); setResults([]); setQuery(''); }}
+          onClick={() => { setSearchOpen(!searchOpen); setResults([]); setQuery(''); setAddMenuTrack(null); }}
           style={{
             width: 40,
             height: 40,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--accent-light), var(--accent))',
+            background: '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#0C0C0F',
-            boxShadow: '0 4px 16px rgba(201,148,62,0.4)',
+            color: '#0A0A0A',
+            boxShadow: '0 4px 16px rgba(255,255,255,0.15)',
           }}
         >
           {searchOpen ? <X size={18} /> : <Search size={18} />}
@@ -101,7 +102,7 @@ export default function Player() {
           position: 'fixed',
           inset: 0,
           zIndex: 150,
-          background: 'rgba(12,12,15,0.95)',
+          background: 'rgba(10,10,10,0.97)',
           backdropFilter: 'blur(20px)',
           display: 'flex',
           flexDirection: 'column',
@@ -149,30 +150,82 @@ export default function Player() {
             {results.map((track) => (
               <div
                 key={track.id}
-                onClick={() => handlePlaySearch(track)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 12,
                   padding: '10px 0',
-                  cursor: 'pointer',
                   borderBottom: '1px solid var(--border)',
                 }}
               >
                 <img
                   src={track.cover}
                   alt=""
-                  style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+                  onClick={() => handlePlaySearch(track)}
+                  style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
                 />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ flex: 1, minWidth: 0 }} onClick={() => handlePlaySearch(track)}>
+                  <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}>
                     {track.title}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
                     {track.artist} · {formatPlatform(track.platform)}
                   </div>
                 </div>
-                <Play size={18} color="var(--accent)" />
+                <button
+                  onClick={() => setAddMenuTrack(addMenuTrack === track.id ? null : track.id)}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    background: addMenuTrack === track.id ? '#fff' : 'var(--surface)',
+                    color: addMenuTrack === track.id ? '#0A0A0A' : 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Plus size={14} />
+                </button>
+                <button onClick={() => handlePlaySearch(track)} style={{ color: '#fff' }}>
+                  <Play size={18} />
+                </button>
+
+                {/* 添加到歌单浮层 */}
+                {addMenuTrack === track.id && playlists.length > 0 && (
+                  <div className="animate-scaleIn" style={{
+                    position: 'absolute',
+                    right: 50,
+                    background: 'var(--bg-elevated)',
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    padding: '8px 0',
+                    minWidth: 140,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                    zIndex: 300,
+                  }}>
+                    <div style={{ padding: '4px 12px 8px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                      添加到歌单
+                    </div>
+                    {playlists.map((pl) => (
+                      <button
+                        key={pl.id}
+                        onClick={() => { addToPlaylist(pl.id, track); setAddMenuTrack(null); }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          textAlign: 'left',
+                          color: 'var(--text-primary)',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        {pl.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -210,7 +263,7 @@ export default function Player() {
                 position: 'absolute',
                 inset: -20,
                 zIndex: -1,
-                opacity: 0.35,
+                opacity: 0.25,
                 filter: 'blur(40px)',
                 background: `url(${currentTrack.cover}) center/cover`,
               }} />
@@ -242,7 +295,7 @@ export default function Player() {
             {currentTrack?.artist || '选择一首歌开始'}
           </p>
           {currentTrack?.platform && (
-            <p style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
               来源: {formatPlatform(currentTrack.platform)}
             </p>
           )}
@@ -268,7 +321,7 @@ export default function Player() {
             <div style={{
               width: `${progress}%`,
               height: '100%',
-              background: 'linear-gradient(90deg, var(--accent-dark), var(--accent))',
+              background: '#fff',
               borderRadius: 4,
               transition: 'width 0.1s linear',
             }} />
@@ -285,7 +338,7 @@ export default function Player() {
           justifyContent: 'space-between',
           marginBottom: 16,
         }}>
-          <button onClick={() => currentTrack && toggleLike(currentTrack.id)} style={{ color: isLiked ? 'var(--accent)' : 'var(--text-secondary)' }}>
+          <button onClick={() => currentTrack && toggleLike(currentTrack.id)} style={{ color: isLiked ? '#fff' : 'var(--text-secondary)' }}>
             <Heart size={22} fill={isLiked ? 'currentColor' : 'none'} />
           </button>
           <button onClick={prev} style={{ color: 'var(--text-primary)' }}>
@@ -297,12 +350,12 @@ export default function Player() {
               width: 68,
               height: 68,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--accent-light), var(--accent))',
+              background: '#fff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#0C0C0F',
-              boxShadow: '0 8px 24px rgba(201,148,62,0.35)',
+              color: '#0A0A0A',
+              boxShadow: '0 8px 24px rgba(255,255,255,0.15)',
             }}
           >
             {isPlaying
@@ -312,7 +365,7 @@ export default function Player() {
           <button onClick={next} style={{ color: 'var(--text-primary)' }}>
             <SkipForward size={28} fill="currentColor" />
           </button>
-          <button onClick={toggleMode} style={{ color: playMode !== 'list' ? 'var(--accent)' : 'var(--text-secondary)' }}>
+          <button onClick={toggleMode} style={{ color: playMode !== 'list' ? '#fff' : 'var(--text-secondary)' }}>
             {playMode === 'random' ? <Shuffle size={22} /> : playMode === 'single' ? <Repeat size={22} /> : <ListMusic size={22} />}
           </button>
         </div>
@@ -327,11 +380,11 @@ export default function Player() {
             step={0.01}
             value={volume}
             onChange={(e) => setVolume(parseFloat(e.target.value))}
-            style={{ flex: 1, accentColor: 'var(--accent)', height: 3 }}
+            style={{ flex: 1, accentColor: '#fff', height: 3 }}
           />
           <button
             onClick={() => setShowPlaylist(!showPlaylist)}
-            style={{ color: showPlaylist ? 'var(--accent)' : 'var(--text-muted)', fontSize: 12 }}
+            style={{ color: showPlaylist ? '#fff' : 'var(--text-muted)', fontSize: 12 }}
           >
             列表 ({playlist.length})
           </button>
@@ -358,7 +411,7 @@ export default function Player() {
                   padding: '8px 0',
                   cursor: 'pointer',
                   borderBottom: i < playlist.length - 1 ? '1px solid var(--border)' : 'none',
-                  color: currentTrack?.id === track.id ? 'var(--accent)' : 'var(--text-primary)',
+                  color: currentTrack?.id === track.id ? '#fff' : 'var(--text-primary)',
                 }}
               >
                 <img src={track.cover} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />

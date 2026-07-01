@@ -191,7 +191,8 @@ router.get('/url', async (req, res) => {
             Referer: 'https://music.163.com/',
           },
         });
-        const finalUrl = headRes.request?.res?.responseUrl || headRes.headers?.location || redirectUrl;
+        let finalUrl = headRes.request?.res?.responseUrl || headRes.headers?.location || redirectUrl;
+        if (finalUrl && finalUrl.startsWith('http:')) finalUrl = finalUrl.replace('http:', 'https:');
         return res.json({ code: 200, data: { url: finalUrl, platform } });
       } catch {
         return res.json({ code: 200, data: { url: redirectUrl, platform } });

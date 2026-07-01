@@ -1,18 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #0C0C0F;
-  --bg-secondary: #16161A;
-  --bg-elevated: #1E1E24;
-  --surface: #25252D;
-  --accent: #C9943E;
-  --accent-light: #E0B05E;
-  --accent-dark: #A67A2E;
-  --text-primary: #F0F0F0;
-  --text-secondary: #8A8A8F;
-  --text-muted: #5A5A60;
-  --border: rgba(255,255,255,0.06);
-  --shadow: rgba(0,0,0,0.5);
+  --bg-primary: #0A0A0A;
+  --bg-secondary: #141414;
+  --bg-elevated: #1A1A1A;
+  --surface: #222222;
+  --accent: #FFFFFF;
+  --accent-light: #FFFFFF;
+  --accent-dark: #888888;
+  --text-primary: #F5F5F5;
+  --text-secondary: #999999;
+  --text-muted: #555555;
+  --border: rgba(255,255,255,0.08);
+  --shadow: rgba(0,0,0,0.6);
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 22px;
@@ -66,7 +66,7 @@ body {
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.5; }
 }
 @keyframes spin {
   from { transform: rotate(0deg); }
@@ -78,21 +78,21 @@ body {
 .animate-scaleIn { animation: scaleIn 0.3s ease both; }
 
 .glass {
-  background: rgba(22, 22, 26, 0.72);
+  background: rgba(20, 20, 20, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--border);
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  background: linear-gradient(135deg, #FFFFFF, #AAAAAA);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .cover-shadow {
-  box-shadow: 0 20px 60px rgba(201, 148, 62, 0.18), 0 8px 24px rgba(0,0,0,0.4);
+  box-shadow: 0 20px 60px rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.5);
 }
 
 button {
