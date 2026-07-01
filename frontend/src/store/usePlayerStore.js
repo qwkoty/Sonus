@@ -80,7 +80,14 @@ export const usePlayerStore = create((set, get) => {
 
   audio.addEventListener('error', () => {
     console.error('Audio error', audio.error);
-    set({ isPlaying: false });
+    set({ isPlaying: false, isLoadingUrl: false, error: '音源加载失败，自动切换下一首' });
+    // 3 秒后自动切换下一首（非单曲循环时）
+    setTimeout(() => {
+      const { playMode, currentTrack } = get();
+      if (currentTrack && playMode !== 'single') {
+        get().next();
+      }
+    }, 3000);
   });
 
   return {
@@ -93,6 +100,7 @@ export const usePlayerStore = create((set, get) => {
     playMode: 'list',
     liked: new Set(),
     isLoadingUrl: false,
+    error: null,
     playlists: loadPlaylists(),
     qqAuth: loadQQAuth(),
     platform: loadPlatform(),
@@ -106,7 +114,7 @@ export const usePlayerStore = create((set, get) => {
     playTrack: async (track) => {
       initAudioSystem();
       const { audio } = get();
-      set({ currentTrack: track, isPlaying: false, currentTime: 0, duration: 0, isLoadingUrl: true, lyrics: [], currentLyric: '' });
+      set({ currentTrack: track, isPlaying: false, currentTime: 0, duration: 0, isLoadingUrl: true, lyrics: [], currentLyric: '', error: null });
 
       let url = track.url || '';
 
@@ -139,12 +147,14 @@ export const usePlayerStore = create((set, get) => {
           set({ isPlaying: true, isLoadingUrl: false, currentTrack: { ...track, url } });
         } catch (err) {
           console.error('播放失败', err);
-          set({ isPlaying: false, isLoadingUrl: false });
+          set({ isPlaying: false, isLoadingUrl: false, error: '播放失败，可能是版权限制或网络问题' });
         }
       } else {
-        set({ isLoadingUrl: false });
+        set({ isLoadingUrl: false, error: '暂无音源，换一首试试' });
       }
     },
+
+    clearError: () => set({ error: null }),
 
     // 预加载：流代理模式下无需提前获取 URL
     preloadUrls: async () => {},

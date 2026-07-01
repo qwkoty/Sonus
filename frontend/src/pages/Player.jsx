@@ -39,6 +39,7 @@ export default function Player({ onNavigate }) {
     toggleMode, toggleLike, playTrack, addToPlaylist,
     platform, preloadUrls,
     lyrics, currentLyric, isLoadingUrl,
+    error, clearError,
   } = store;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -66,6 +67,62 @@ export default function Player({ onNavigate }) {
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
   }, [searchOpen]);
+
+  // 错误提示自动消失
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => clearError(), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, clearError]);
+
+  // 键盘快捷键
+  useEffect(() => {
+    const onKey = (e) => {
+      // 输入框中不触发快捷键
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (searchOpen) return;
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowRight':
+          if (e.shiftKey) { e.preventDefault(); next(); }
+          else if (duration) { e.preventDefault(); seek(Math.min(currentTime + 5, duration)); }
+          break;
+        case 'ArrowLeft':
+          if (e.shiftKey) { e.preventDefault(); prev(); }
+          else if (duration) { e.preventDefault(); seek(Math.max(currentTime - 5, 0)); }
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setVolume(Math.min(volume + 0.05, 1));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setVolume(Math.max(volume - 0.05, 0));
+          break;
+        case 'KeyM':
+          e.preventDefault();
+          toggleMode();
+          break;
+        case 'KeyL':
+          e.preventDefault();
+          if (currentTrack) toggleLike(currentTrack.id);
+          break;
+        case 'KeyF':
+          e.preventDefault();
+          setSearchOpen(true);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [togglePlay, next, prev, seek, setVolume, toggleMode, toggleLike, currentTrack, duration, currentTime, volume, searchOpen]);
 
   const isLiked = currentTrack ? liked.has(currentTrack.id) : false;
   const progress = duration ? (currentTime / duration) * 100 : 0;
@@ -633,6 +690,36 @@ export default function Player({ onNavigate }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ====== Toast 错误提示 ====== */}
+      {error && (
+        <div className="animate-slideUp" style={{
+          position: 'absolute',
+          top: 'calc(60px + env(safe-area-inset-top))',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 500,
+          background: 'rgba(180,40,40,0.9)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          color: '#fff',
+          padding: '10px 20px',
+          borderRadius: 20,
+          fontSize: 13,
+          fontWeight: 500,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          maxWidth: '80vw',
+          textAlign: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span>{error}</span>
+          <button onClick={clearError} style={{ cursor: 'pointer', opacity: 0.7, marginLeft: 4 }}>
+            <X size={14} />
+          </button>
         </div>
       )}
     </div>
