@@ -5,7 +5,7 @@ export default function Profile() {
   const [linked, setLinked] = useState(false);
 
   return (
-    <div style={{ padding: 'calc(12px + env(safe-area-inset-top)) 20px 140px' }}>
+    <div style={{ padding: 'calc(12px + env(safe-area-inset-top)) 20px 40px' }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 24 }}>我的</h1>
 
       {/* User Card */}
